@@ -42,10 +42,10 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(
         &mut self,
-        ui: &eframe::egui::Context,
+        ctx: &eframe::egui::Context,
         _frame: &mut eframe::Frame,
     ) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("My egui Application");
             ui.horizontal(|ui| {
                 let name_label = ui.label("Your name: ");
