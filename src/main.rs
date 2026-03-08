@@ -1,7 +1,10 @@
 // hide console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use eframe::egui;
+use std::array;
+
+use eframe::egui::{self, ColorImage, TextureHandle};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
 fn main() -> eframe::Result {
     // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -9,7 +12,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([320.0, 240.0]),
+            .with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
 
@@ -19,6 +22,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx.set_pixels_per_point(4.0);
 
             Ok(Box::<MyApp>::default())
         }),
@@ -27,16 +31,28 @@ fn main() -> eframe::Result {
 
 struct MyApp {
     name: String,
-    age: u32,
+    texture: Option<TextureHandle>,
+    show_diagnostics: bool,
+    rng: SmallRng,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
             name: "Arthur".to_owned(),
-            age: 42,
+            texture: None,
+            show_diagnostics: false,
+            rng: SmallRng::seed_from_u64(43),
         }
     }
+}
+
+const IMAGE_RES: usize = 200;
+fn generate_image(rng: &mut SmallRng) -> egui::ColorImage {
+    const DIM: usize = 3 * IMAGE_RES * IMAGE_RES;
+    let data: [u8; DIM] = array::from_fn(|_i| rng.random_range(0..200) as u8);
+
+    return ColorImage::from_rgb([IMAGE_RES, IMAGE_RES], &data);
 }
 
 impl eframe::App for MyApp {
@@ -46,19 +62,43 @@ impl eframe::App for MyApp {
         _frame: &mut eframe::Frame,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            ctx.request_repaint();
+
             ui.heading("My egui Application");
             ui.horizontal(|ui| {
                 let name_label = ui.label("Your name: ");
                 ui.text_edit_singleline(&mut self.name)
                     .labelled_by(name_label.id);
             });
-            ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
-            if ui.button("Increment").clicked() {
-                self.age += 1;
-            }
-            ui.label(format!("Hello '{}', age {}", self.name, self.age));
+            let texture: &mut egui::TextureHandle =
+                self.texture.get_or_insert_with(|| {
+                    // Load the texture only once.
+                    ui.ctx().load_texture(
+                        "my-image",
+                        generate_image(&mut self.rng),
+                        Default::default(),
+                    )
+                });
+            texture.set(generate_image(&mut self.rng), Default::default());
 
-            ui.image(egui::include_image!("../assets/ferris.png"));
+            // Show the image:
+            ui.image((texture.id(), texture.size_vec2()));
+
+            // FPS counter
+            ui.label(format!("FPS: {:.1}", 1.0 / ctx.input(|i| i.stable_dt)));
+
+            // Diagnostics
+            if ui.button("Show diagnostics").clicked() {
+                self.show_diagnostics = !self.show_diagnostics;
+            }
+
+            egui::Window::new("Diagnostics")
+                .open(&mut self.show_diagnostics)
+                .scroll(true)
+                .default_height(100.0)
+                .show(ctx, |ui| {
+                    ctx.inspection_ui(ui);
+                });
         });
     }
 }
