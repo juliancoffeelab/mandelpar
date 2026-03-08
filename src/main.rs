@@ -48,11 +48,14 @@ impl Default for MyApp {
 }
 
 const IMAGE_RES: usize = 200;
-fn generate_image(rng: &mut SmallRng) -> egui::ColorImage {
-    const DIM: usize = 3 * IMAGE_RES * IMAGE_RES;
-    let data: [u8; DIM] = array::from_fn(|_i| rng.random_range(0..200) as u8);
+impl MyApp {
+    fn generate_image(&mut self) -> egui::ColorImage {
+        const DIM: usize = 3 * IMAGE_RES * IMAGE_RES;
+        let data: [u8; DIM] =
+            array::from_fn(|_i| self.rng.random_range(0..200) as u8);
 
-    return ColorImage::from_rgb([IMAGE_RES, IMAGE_RES], &data);
+        return ColorImage::from_rgb([IMAGE_RES, IMAGE_RES], &data);
+    }
 }
 
 impl eframe::App for MyApp {
@@ -70,16 +73,17 @@ impl eframe::App for MyApp {
                 ui.text_edit_singleline(&mut self.name)
                     .labelled_by(name_label.id);
             });
+            let img_data = self.generate_image();
             let texture: &mut egui::TextureHandle =
                 self.texture.get_or_insert_with(|| {
                     // Load the texture only once.
                     ui.ctx().load_texture(
                         "my-image",
-                        generate_image(&mut self.rng),
+                        img_data.clone(),
                         Default::default(),
                     )
                 });
-            texture.set(generate_image(&mut self.rng), Default::default());
+            texture.set(img_data, Default::default());
 
             // Show the image:
             ui.image((texture.id(), texture.size_vec2()));
