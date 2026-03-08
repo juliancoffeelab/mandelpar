@@ -1,10 +1,12 @@
 // hide console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::array;
+use std::{
+    array,
+    time::{Duration, Instant},
+};
 
 use eframe::egui::{self, ColorImage, TextureHandle};
-use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
 fn main() -> eframe::Result {
     // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -33,7 +35,7 @@ struct MyApp {
     name: String,
     texture: Option<TextureHandle>,
     show_diagnostics: bool,
-    rng: SmallRng,
+    start: Instant,
 }
 
 impl Default for MyApp {
@@ -42,7 +44,7 @@ impl Default for MyApp {
             name: "Arthur".to_owned(),
             texture: None,
             show_diagnostics: false,
-            rng: SmallRng::seed_from_u64(43),
+            start: Instant::now(),
         }
     }
 }
@@ -51,10 +53,42 @@ const IMAGE_RES: usize = 200;
 impl MyApp {
     fn generate_image(&mut self) -> egui::ColorImage {
         const DIM: usize = 3 * IMAGE_RES * IMAGE_RES;
-        let data: [u8; DIM] =
-            array::from_fn(|_i| self.rng.random_range(0..200) as u8);
+        let x = Instant::now().duration_since(self.start).as_millis();
 
-        return ColorImage::from_rgb([IMAGE_RES, IMAGE_RES], &data);
+        // blinking sin wave
+        let impulse = (x as f64 / 500.0).sin().powi(2) * 150.0 + 105.0;
+        debug_assert!(
+            impulse > 105.0 && impulse < 256.0,
+            "{impulse} not in 105.0..256.0"
+        );
+
+        let dist = |p1, p2| {
+            let (x1, y1): (usize, usize) = p1;
+            let (x2, y2): (usize, usize) = p2;
+
+            let dx = (x2 as f64 - x1 as f64).powi(2);
+            let dy = (y2 as f64 - y1 as f64).powi(2);
+
+            (dx + dy).sqrt()
+        };
+
+        let data: [u8; DIM] = array::from_fn(|i| {
+            let i = i / 3;
+            let impulse = impulse as u8;
+            let center = IMAGE_RES / 2;
+            let d = dist((i / IMAGE_RES, i % IMAGE_RES), (center, center));
+            let max_d = dist((0, 0), (center, center));
+
+            let rescale = d / max_d;
+            debug_assert!(
+                rescale > 0.0 - f64::EPSILON && rescale < 1.0 + f64::EPSILON,
+                "{rescale} not in 0.0..1.0"
+            );
+
+            (rescale * impulse as f64) as u8
+        });
+
+        ColorImage::from_rgb([IMAGE_RES, IMAGE_RES], &data)
     }
 }
 
@@ -65,7 +99,7 @@ impl eframe::App for MyApp {
         _frame: &mut eframe::Frame,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ctx.request_repaint();
+            ctx.request_repaint_after(Duration::from_millis(20));
 
             ui.heading("My egui Application");
             ui.horizontal(|ui| {
