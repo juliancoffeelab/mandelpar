@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eframe::egui::{self, ColorImage, TextureHandle};
+use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 
 fn main() -> eframe::Result {
     // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -31,26 +31,44 @@ fn main() -> eframe::Result {
     )
 }
 
+#[derive(PartialEq, Default)]
+enum TextureOpt {
+    #[default]
+    Default,
+    Nearest,
+    NearestMirrored,
+}
+
 struct MyApp {
-    name: String,
     texture: Option<TextureHandle>,
     show_diagnostics: bool,
     start: Instant,
+    texture_opt: TextureOpt,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
         Self {
-            name: "Arthur".to_owned(),
             texture: None,
             show_diagnostics: false,
             start: Instant::now(),
+            texture_opt: Default::default(),
         }
     }
 }
 
 const IMAGE_RES: usize = 200;
 impl MyApp {
+    fn texture_option(&self) -> TextureOptions {
+        match self.texture_opt {
+            TextureOpt::Default => TextureOptions::default(),
+            TextureOpt::Nearest => TextureOptions::NEAREST_REPEAT,
+            TextureOpt::NearestMirrored => {
+                TextureOptions::NEAREST_MIRRORED_REPEAT
+            },
+        }
+    }
+
     fn generate_image(&mut self) -> egui::ColorImage {
         const DIM: usize = 3 * IMAGE_RES * IMAGE_RES;
         let x = Instant::now().duration_since(self.start).as_millis();
@@ -102,22 +120,31 @@ impl eframe::App for MyApp {
             ctx.request_repaint_after(Duration::from_millis(20));
 
             ui.heading("My egui Application");
-            ui.horizontal(|ui| {
-                let name_label = ui.label("Your name: ");
-                ui.text_edit_singleline(&mut self.name)
-                    .labelled_by(name_label.id);
+            ui.horizontal_top(|ui| {
+                ui.radio_value(
+                    &mut self.texture_opt,
+                    TextureOpt::Default,
+                    "Default",
+                );
+                ui.radio_value(
+                    &mut self.texture_opt,
+                    TextureOpt::Nearest,
+                    "Nearest",
+                );
+                ui.radio_value(
+                    &mut self.texture_opt,
+                    TextureOpt::NearestMirrored,
+                    "Nearest Mirrored",
+                );
             });
+            let opts = self.texture_option();
             let img_data = self.generate_image();
             let texture: &mut egui::TextureHandle =
                 self.texture.get_or_insert_with(|| {
                     // Load the texture only once.
-                    ui.ctx().load_texture(
-                        "my-image",
-                        img_data.clone(),
-                        Default::default(),
-                    )
+                    ui.ctx().load_texture("my-image", img_data.clone(), opts)
                 });
-            texture.set(img_data, Default::default());
+            texture.set(img_data, opts);
 
             // Show the image:
             ui.image((texture.id(), texture.size_vec2()));
